@@ -25,10 +25,10 @@
     </properties>
 
     <repositories>
-        <repository>
-        <id>nexus</id>
-        <url>http://maven.fraudmetrix.cn/nexus/content/groups/public/</url>
-        </repository>
+        <!--<repository>
+            <id>nexus</id>
+            <url>http://maven.fraudmetrix.cn/nexus/content/groups/public/</url>
+        </repository>-->
         <repository>
             <id>alimaven</id>
             <name>Aliyun Maven central</name>

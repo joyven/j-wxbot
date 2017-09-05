@@ -31,7 +31,7 @@ public class WxBotService {
     @Resource
     private QrCodeConfig qrCodeConfig;
 
-    public Map<String, Object> getUuid() {
+    public WxUuid getUuid() {
         LOGGER.info("开始获取微信UUID，appid:{}", uuidConfig.getAppid());
         Map<String, String> body = new HashMap<>();
         body.put("appid", uuidConfig.getAppid());
