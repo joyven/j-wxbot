@@ -2,16 +2,16 @@ package com.joyven.wxbot.http;
 
 import com.joyven.wxbot.util.CustomHttpClient;
 import org.apache.http.impl.client.CloseableHttpClient;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.http.converter.StringHttpMessageConverter;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.MalformedURLException;
 import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyManagementException;
 import java.security.KeyStoreException;
@@ -37,6 +37,20 @@ public class RestHttpsClient {
         ResponseEntity entity = restTemplate.getForEntity(uri, claszz);
         return (T) entity.getBody();
     }
+
+    public static <T> T getObject(String strUrl, Map<String, Object> headers, Class<T> clazz) throws MalformedURLException, URISyntaxException {
+        RestTemplate restTemplate = defaultRestTemplate();
+        URL url = new URL(strUrl);
+        URI uri = new URI(url.getProtocol(), url.getHost(), url.getPath(), url.getQuery(), null);
+        HttpHeaders httpHeaders = new HttpHeaders();
+        if (headers != null) {
+            headers.forEach((k,v)->{httpHeaders.add(k, String.valueOf(v));});
+        }
+        HttpEntity entity = new HttpEntity(null, httpHeaders);
+        ResponseEntity<T> responseEntity = restTemplate.exchange(uri, HttpMethod.GET, entity, clazz);
+        return responseEntity.getBody();
+    }
+
     public static String postFormUrlEncode(String url, Map<String, ?> params) {
         RestTemplate restTemplate = defaultRestTemplate();
         StringBuilder builder = new StringBuilder();
@@ -50,7 +64,6 @@ public class RestHttpsClient {
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
         HttpEntity entity = new HttpEntity(null, headers);
         ResponseEntity responseEntity = restTemplate.postForEntity(uri, entity, String.class);
-        headers =  responseEntity.getHeaders();
         if (responseEntity.getStatusCodeValue() == SC_OK) {
             return (String) responseEntity.getBody();
         }
