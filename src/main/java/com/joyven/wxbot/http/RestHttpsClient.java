@@ -1,17 +1,22 @@
 package com.joyven.wxbot.http;
 
+import com.alibaba.fastjson.JSONObject;
+import com.alibaba.fastjson.support.spring.FastJsonHttpMessageConverter;
 import com.joyven.wxbot.util.CustomHttpClient;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.springframework.http.*;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.http.converter.StringHttpMessageConverter;
+import org.springframework.http.converter.json.AbstractJackson2HttpMessageConverter;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.web.client.RestTemplate;
 
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyManagementException;
 import java.security.KeyStoreException;
@@ -48,7 +53,29 @@ public class RestHttpsClient {
         }
         HttpEntity entity = new HttpEntity(null, httpHeaders);
         ResponseEntity<T> responseEntity = restTemplate.exchange(uri, HttpMethod.GET, entity, clazz);
-        return responseEntity.getBody();
+        if (responseEntity != null) {
+            return responseEntity.getBody();
+        }
+        return null;
+    }
+
+    public static <T> String postJson(String strUrl, Map<String, Object> headers, T body)
+            throws MalformedURLException, URISyntaxException {
+        RestTemplate restTemplate = defaultRestTemplate();
+        HttpHeaders httpHeaders = new HttpHeaders();
+        if (headers != null && headers.size() >0) {
+            headers.forEach((k,v) -> httpHeaders.set(k, String.valueOf(v)));
+        }
+        httpHeaders.setContentType(MediaType.APPLICATION_JSON_UTF8);
+        String json = JSONObject.toJSONString(body);
+        System.out.println(json);
+        HttpEntity<String> entity = new HttpEntity<>(json, httpHeaders);
+        ResponseEntity responseEntity = restTemplate.exchange(strUrl, HttpMethod.POST, entity, String.class);
+        if (responseEntity != null) {
+            return (String) responseEntity.getBody();
+        }
+        return null;
+
     }
 
     public static String postFormUrlEncode(String url, Map<String, ?> params) {
@@ -81,9 +108,11 @@ public class RestHttpsClient {
                 new HttpComponentsClientHttpRequestFactory(httpClient);
         RestTemplate restTemplate = new RestTemplate(requestFactory);
         List<HttpMessageConverter<?>> messageConverters = restTemplate.getMessageConverters();
-        messageConverters.removeIf(converter -> converter instanceof StringHttpMessageConverter);
+        messageConverters.removeIf(StringHttpMessageConverter.class::isInstance);
+        messageConverters.removeIf(MappingJackson2HttpMessageConverter.class::isInstance);
 
         messageConverters.add(new StringHttpMessageConverter(StandardCharsets.UTF_8));
+        messageConverters.add(new FastJsonHttpMessageConverter());
         return restTemplate;
 
     }

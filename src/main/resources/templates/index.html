@@ -1,10 +1,57 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head>
-    <meta charset="UTF-8">
-    <title>Title</title>
+    <meta charset="UTF-8"/>
+    <title>登录微信</title>
 </head>
-<body>
+<body onshow="connectSock()">
+<center>
+    <img th:src="${qrcode}" th:width="200" th:height="200"/>
+</center>
+<script type="text/javascript" th:src="@{/js/jquery-3.2.1.min.js}"/>
+<script type="text/javascript" th:src="@{/js/sockjs/sockjs.min.js}"/>
+<script type="text/javascript" th:src="@{/js/stomp.js}"/>
+<script type="text/javascript">
+    /*if (!!window.EventSource) {
+        var source = new EventSource("/wxbot/portal/check/login");
+        source.onmessage = function (e) {
+            console.log(e.data)
+            if (e.data == "Hello World") {
+                source.close();
+            }
+        }
+        source.onopen = (function (e) {
+            console.log("链接打开...");
+            console.log(e.data)
+        })
+        source.onerror = function (e) {
+            console.log("error");
+        }
+    } else {
+        console.log("你的浏览器不支持！");
+    }*/
+    
+</script>
+<script th:inline="javascript">
+    var stomp = null;
+    function connectSock() {
+        var sock = new SockJS("/endpointWxBot");
+        stomp = Stomp.over(sock);
+        stomp.connect({},function (frame) {
+            console.log('Connected:' + frame);
+            stomp.subscribe("/wxbot/queue/check", function (message) {
+                console.log(message)
+            });
+        });
+    }
 
+    function sendMsg(content) {
+        if (stomp == null) {
+            connectSock();
+        }
+        stomp.send('/wxbot//chat',{}, content);
+    }
+//    sendTextMsg("测试");
+</script>
 </body>
 </html>

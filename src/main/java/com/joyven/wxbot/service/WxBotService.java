@@ -1,13 +1,25 @@
 package com.joyven.wxbot.service;
 
+import com.alibaba.fastjson.JSON;
 import com.google.zxing.WriterException;
-import com.joyven.wxbot.config.QrCodeConfig;
-import com.joyven.wxbot.config.UUIDConfig;
-import com.joyven.wxbot.config.WaitLoginByScanQrCodeConfig;
+import com.joyven.wxbot.config.wx.ContactConfig;
+import com.joyven.wxbot.config.wx.QrCodeConfig;
+import com.joyven.wxbot.config.wx.UUIDConfig;
+import com.joyven.wxbot.config.wx.WaitLoginByScanQrCodeConfig;
+import com.joyven.wxbot.config.wx.WebWxInitConfig;
+import com.joyven.wxbot.config.wx.WxMsgConfig;
 import com.joyven.wxbot.http.HttpsClient;
 import com.joyven.wxbot.http.RestHttpsClient;
+import com.joyven.wxbot.message.vo.TextMsg;
+import com.joyven.wxbot.pojo.WxContactResponse;
 import com.joyven.wxbot.pojo.WxError;
+import com.joyven.wxbot.pojo.WxInitBase;
+import com.joyven.wxbot.pojo.WxInitResponse;
+import com.joyven.wxbot.pojo.WxStatusNofity;
+import com.joyven.wxbot.pojo.WxUser;
 import com.joyven.wxbot.pojo.WxUuid;
+import com.joyven.wxbot.util.NumberUtils;
+import com.joyven.wxbot.util.TimeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -26,6 +38,7 @@ import java.util.Random;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static com.joyven.wxbot.http.RestHttpsClient.postJson;
 import static com.joyven.wxbot.util.TimeUtils.getTimestamp;
 import static com.joyven.wxbot.util.XmlUtils.getObject;
 
@@ -33,12 +46,19 @@ import static com.joyven.wxbot.util.XmlUtils.getObject;
 public class WxBotService {
     private static final Logger LOGGER = LoggerFactory.getLogger(WxBotService.class);
     private static final ThreadLocal<String> local = new ThreadLocal<>();
+    private static final ThreadLocal<WxError> wxError = new ThreadLocal<>();
     @Resource
     private UUIDConfig uuidConfig;
     @Resource
     private QrCodeConfig qrCodeConfig;
     @Resource
     private WaitLoginByScanQrCodeConfig scanQrCodeConfig;
+    @Resource
+    private WebWxInitConfig webWxInitConfig;
+    @Resource
+    private ContactConfig contactConfig;
+    @Resource
+    private WxMsgConfig wxMsgConfig;
 
     public WxUuid getUuid() {
         LOGGER.info("开始获取微信UUID，appid:{}", uuidConfig.getAppid());
@@ -73,12 +93,6 @@ public class WxBotService {
     public String genQrCode(String uuid) throws WriterException, IOException {
         String url = qrCodeConfig.getQrCodeUrl();
         String imagePath = qrCodeConfig.getImagePath();
-        if (imagePath == null || "".equals(imagePath)) {
-            imagePath = System.getProperty("user.home");
-        }
-        if (imagePath.lastIndexOf("/") < 0) {
-            imagePath = imagePath + File.separator;
-        }
         FileOutputStream fos;
         try {
             InputStream inputStream = HttpsClient.get(url + uuid).asStream();
@@ -95,6 +109,12 @@ public class WxBotService {
             e.printStackTrace();
         }
         return imagePath + qrCodeConfig.getImageName();
+    }
+
+    public InputStream getQrCode(String uuid) {
+        String url = qrCodeConfig.getQrCodeUrl();
+        return HttpsClient.get(url + uuid).asStream();
+
     }
 
     public String waitForLogin(String uuid) {
@@ -135,7 +155,6 @@ public class WxBotService {
         } catch (URISyntaxException e) {
             e.printStackTrace();
         }
-        System.out.println(res);
         WxError wxError = getObject(res, WxError.class);
         if (wxError != null) {
             System.out.println(wxError.toString());
@@ -145,9 +164,135 @@ public class WxBotService {
         return wxError;
     }
 
-    public Object init() {
+    public WxInitResponse init(String passTicket, String skey, WxInitBase requestBase) {
         LOGGER.info("初始化微信客户端...");
-        return null;
+        System.out.println("初始化的skey:" + skey);
+        String url = webWxInitConfig.getWebWxInitUrl();
+        int cap = url.length() + passTicket.length() + skey.length() + 13 + 21 + 11;
+        StringBuilder sb = new StringBuilder(cap);
+        sb.append(url).append("?pass_ticket=").append(passTicket)
+                .append("&skey=").append(skey).append("&r=")
+                .append(System.currentTimeMillis()).append("&lang=en_US");
+        Map<String, WxInitBase> params = new HashMap<>(2);
+        params.put("BaseRequest", requestBase);
+        String res = null;
+        try {
+            res = postJson(sb.toString(), null, params);
+            System.out.println(res);
+        } catch (MalformedURLException | URISyntaxException e) {
+            e.printStackTrace();
+        }
+        // 解析res
+        WxInitResponse response = JSON.parseObject(res, WxInitResponse.class);
+        return response;
     }
+
+    /**
+     * 开启微信状态通知
+     *
+     * @param wxError
+     * @param initBase
+     * @param wxUser
+     */
+    public void statusNotify(WxError wxError, WxInitBase initBase, WxUser wxUser) {
+        String url = "https://wx.qq.com/cgi-bin/mmwebwx-bin/webwxstatusnotify?lang=zh_CN&pass_ticket=";
+        if (wxError == null) {
+            throw new RuntimeException("微信状态通知参数错误！");
+        }
+        url = url + wxError.getPassTicket();
+
+        WxStatusNofity nofity = new WxStatusNofity();
+        nofity.setBaseRequest(initBase);
+        nofity.setCode(3);
+        nofity.setFromUserName(wxUser.getUserNme());
+        nofity.setToUserName(wxUser.getUserNme());
+        nofity.setClientMsgId(TimeUtils.getTimestamp());
+        String res = null;
+        try {
+            res = postJson(url, null, nofity);
+        } catch (MalformedURLException e) {
+            e.printStackTrace();
+        } catch (URISyntaxException e) {
+            e.printStackTrace();
+        }
+        if (res != null) {
+            System.out.println("通知：" + res);
+        }
+    }
+
+    /**
+     * https://wx.qq.com/cgi-bin/mmwebwx-bin//webwxgetcontact?pass_ticket=xxx&skey=xxx&r=xxx
+     *
+     * @param passTicket
+     * @param skey
+     */
+    public WxContactResponse getContact(String passTicket, String skey, WxInitBase requestBase) throws MalformedURLException, URISyntaxException {
+        String url = contactConfig.getWxContactUrl();
+        StringBuilder sb = new StringBuilder();
+        sb.append(url).append("?seq=0&lang=zh_CN&pass_ticket=").append(passTicket)
+                .append("&skey=").append(skey).append("&r=").append(System.currentTimeMillis());
+        url = sb.toString();
+        System.out.println(url);
+        Map<String, WxInitBase> params = new HashMap<>(2);
+        params.put("BaseRequest", requestBase);
+        String res = postJson(sb.toString(), null, params);
+        System.out.println(res);
+        return JSON.parseObject(res, WxContactResponse.class);
+    }
+
+    /**
+     * 批量获取联系人
+     */
+    public void batchGetContact() {
+
+    }
+
+    /**
+     * 获取群聊成员信息
+     */
+    public void batchGetGroupContact() {
+
+    }
+
+    /**
+     * 发送文本消息
+     * @param passTicket 票据
+     * @param from 发送者userName
+     * @param to 接收者userName
+     * @param content 发送内容
+     * @param requestBase cookie请求体
+     * @throws MalformedURLException
+     * @throws URISyntaxException
+     */
+    public void sendTextMsg(String passTicket, String from, String to, String content, WxInitBase requestBase) throws MalformedURLException, URISyntaxException {
+        String url = wxMsgConfig.getWxMsgSendUrl();
+        url = url + "?pass_ticket=" + passTicket;
+        Map<String, Object> param = new HashMap<>();
+        param.put("BaseRequest", requestBase);
+        TextMsg msg = new TextMsg();
+        msg.setContent(content);
+        msg.setFromUserName(from);
+        msg.setToUserName(to);
+        String msgId = NumberUtils.genMsgId();
+        msg.setClientMsgId(msgId);
+        msg.setLocalID(msgId);
+        param.put("Msg", msg);
+        String res = postJson(url, null, param);
+        System.out.println(res);
+    }
+
+    // 撤回消息
+    public boolean revokemsg() {
+        // https://wx.qq.com/cgi-bin/mmwebwx-bin/webwxrevokemsg
+        return true;
+    }
+
+    // 发送表情
+    public void sendEmotionMsg() {
+        // https://wx2.qq.com/cgi-bin/mmwebwx-bin/webwxsendemoticon?fun=sys&f=json&pass_ticket=xxx
+    }
+
+
+
 
 }

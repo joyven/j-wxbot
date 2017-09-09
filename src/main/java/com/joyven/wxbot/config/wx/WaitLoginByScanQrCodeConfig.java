@@ -1,4 +1,4 @@
-package com.joyven.wxbot.config;
+package com.joyven.wxbot.config.wx;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;

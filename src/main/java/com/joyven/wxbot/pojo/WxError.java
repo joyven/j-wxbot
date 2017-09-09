@@ -14,7 +14,7 @@ public class WxError {
     private String message;
     private String skey;
     private String wxsid;
-    private String wxuin;
+    private Integer wxuin;
     private String passTicket;
     private String isgrayscale;
 
@@ -50,11 +50,11 @@ public class WxError {
         this.wxsid = wxsid;
     }
 
-    public String getWxuin() {
+    public Integer getWxuin() {
         return wxuin;
     }
 
-    public void setWxuin(String wxuin) {
+    public void setWxuin(Integer wxuin) {
         this.wxuin = wxuin;
     }
 
